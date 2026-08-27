@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>黒田文庫</title>
+  <style>
+    body { font-family: "Georgia", "Hiragino Mincho ProN", serif; max-width: 800px; margin: 20px auto; padding: 0 20px; line-height: 1.8; color: #2b2b2b; }
+    h1, h2 { color: #333; font-family: sans-serif; }
+    a { color: #0066cc; text-decoration: none; }
+    
+    .tab-nav { font-family: sans-serif; display: flex; gap: 10px; border-bottom: 2px solid #ddd; margin-bottom: 20px; padding-bottom: 10px; }
+    .tab-btn { background: #eee; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; color: #555; }
+    .tab-btn.active { background: #0066cc; color: #fff; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .card { font-family: sans-serif; border: 1px solid #ccc; padding: 15px; border-radius: 6px; margin-bottom: 20px; background: #fafafa; }
+    input, textarea, select, button { font-family: sans-serif; width: 100%; margin-top: 8px; margin-bottom: 12px; padding: 8px; box-sizing: border-box; }
+    textarea { height: 120px; }
+    .btn-submit { background: #0066cc; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-submit:hover { background: #0052a3; }
+    .btn-danger { background: #cc0000; color: #fff; border: none; border-radius: 4px; cursor: pointer; width: auto; padding: 4px 8px; }
+
+    .tag { display: inline-block; background: #e0e0e0; padding: 2px 8px; border-radius: 12px; font-size: 0.85em; margin-right: 5px; font-family: sans-serif; }
+    .tag-filter { margin-bottom: 20px; font-family: sans-serif; }
+    .tag-filter button { font-family: sans-serif; margin-right: 5px; padding: 4px 8px; cursor: pointer; width: auto; }
+    .series-card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 15px; margin-bottom: 20px; }
+    .chapter-list { list-style: none; padding-left: 0; font-family: sans-serif; }
+    .chapter-list li { margin-bottom: 5px; }
+    .item-list { list-style: none; padding: 0; }
+    .item-list li { background: #fff; border: 1px solid #ddd; padding: 10px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .viewer { background: #fdfbf7; border: 1px solid #e2dcd3; padding: 25px; border-radius: 6px; margin-top: 20px; white-space: pre-wrap; word-wrap: break-word; }
+  </style>
+</head>
+<body>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchPage('readerPage')">📖 閲覧ページ</button>
+    <button class="tab-btn" onclick="switchPage('adminPage')">⚙️ 投稿・管理ページ</button>
+  </div>
+
+  <!-- 1. 閲覧用ページ -->
+  <div id="readerPage" class="page active">
+    <h1>小説ライブラリ</h1>
+    <div class="tag-filter" id="tagFilter"></div>
+    <div id="library">読み込み中...</div>
+
+    <div id="readerArea" style="display:none;">
+      <button onclick="closeReader()" style="cursor:pointer; width:auto;">← 一覧に戻る</button>
+      <h2 id="readChapterTitle"></h2>
+      <div id="readContent" class="viewer"></div>
+    </div>
+  </div>
+
+  <!-- 2. 投稿・管理ページ -->
+  <div id="adminPage" class="page">
+    <h1>投稿・管理ダッシュボード</h1>
+
+    <div class="card">
+      <h2>1. 新しい作品フォルダを作成</h2>
+      <input type="text" id="seriesTitle" placeholder="作品名（例: 黒田ワールド）">
+      <input type="text" id="seriesAuthor" placeholder="作者名（例: 黒田祥一）">
+      <input type="text" id="seriesTags" placeholder="タグ（カンマ区切り 例: SF, 冒険, 完結）">
+      <button class="btn-submit" onclick="createSeries()">作品フォルダを作成</button>
+    </div>
+
+    <div class="card">
+      <h2>2. 作品に巻・話を追加</h2>
+      <label for="seriesSelect">投稿先の作品を選択:</label>
+      <select id="seriesSelect"></select>
+      <input type="text" id="chapterTitle" placeholder="サブタイトル / 巻数（例: 一巻, 第1話）">
+      <textarea id="chapterContent" placeholder="本文を入力してください..."></textarea>
+      <button class="btn-submit" onclick="addChapter()">話を追加する</button>
+    </div>
+
+    <div class="card">
+      <h2>3. 投稿済み作品の管理・削除</h2>
+      <div id="manageList">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK の読み込み -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, arrayUnion 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // ★★★ ここを自身のFirebaseの設定情報に置き換えてください ★★★
+    const firebaseConfig = {
+      apiKey: "AIzaSyAIexYo5tCQ2_IfkBeaw6iaZi41VRciW-A",
+      authDomain: "novel-app-5300d.firebaseapp.com",
+      projectId: "novel-app-5300d",
+      storageBucket: "novel-app-5300d.firebasestorage.app",
+      messagingSenderId: "G-9P52P56HGG",
+      appId: "1:636264201960:web:347354e9613fb3ba32535d"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let novels = []; // リアルタイム同期される作品データ
+
+    // Firestoreのデータ変更をリアルタイム監視（友達が投稿したら自動更新）
+    onSnapshot(collection(db, "novels"), (snapshot) => {
+      novels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      renderAll();
+    });
+
+    // --- グローバル関数としてウィンドウに登録 ---
+
+    window.switchPage = function(pageId) {
+      document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+      document.getElementById(pageId).classList.add('active');
+      if (pageId === 'readerPage') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        closeReader();
+      } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+      }
+    };
+
+    // 1. 作品（フォルダ）の新規作成
+    window.createSeries = async function() {
+      const title = document.getElementById('seriesTitle').value.trim();
+      const author = document.getElementById('seriesAuthor').value.trim() || '名無し';
+      const tagsInput = document.getElementById('seriesTags').value.trim();
+
+      if (!title) return alert('作品名を入力してください');
+
+      const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : [];
+
+      try {
+        await addDoc(collection(db, "novels"), {
+          title: title,
+          author: author,
+          tags: tags,
+          chapters: [],
+          createdAt: new Date().toISOString()
+        });
+        document.getElementById('seriesTitle').value = '';
+        document.getElementById('seriesAuthor').value = '';
+        document.getElementById('seriesTags').value = '';
+        alert(`作品「${title}」を作成しました`);
+      } catch (e) {
+        alert("エラーが発生しました: " + e.message);
+      }
+    };
+
+    // 2. 巻・話の追加
+    window.addChapter = async function() {
+      const seriesId = document.getElementById('seriesSelect').value;
+      const title = document.getElementById('chapterTitle').value.trim();
+      const content = document.getElementById('chapterContent').value.trim();
+
+      if (!seriesId) return alert('作品を選択してください');
+      if (!title || !content) return alert('タイトルと本文の両方を入力してください');
+
+      try {
+        const seriesRef = doc(db, "novels", seriesId);
+        const newChapter = {
+          id: Date.now().toString(),
+          title: title,
+          content: content,
+          createdAt: new Date().toLocaleDateString()
+        };
+
+        await updateDoc(seriesRef, {
+          chapters: arrayUnion(newChapter)
+        });
+
+        document.getElementById('chapterTitle').value = '';
+        document.getElementById('chapterContent').value = '';
+        alert(`「${title}」を追加しました`);
+      } catch (e) {
+        alert("エラーが発生しました: " + e.message);
+      }
+    };
+
+    // 3. 作品全体の削除
+    window.deleteSeries = async function(seriesId) {
+      if (!confirm('この作品と、含まれるすべての話を削除しますか？')) return;
+      try {
+        await deleteDoc(doc(db, "novels", seriesId));
+      } catch (e) {
+        alert("削除エラー: " + e.message);
+      }
+    };
+
+    // 4. 特定の話のみ削除
+    window.deleteChapter = async function(seriesId, chapterId) {
+      if (!confirm('この話を削除しますか？')) return;
+      const series = novels.find(s => s.id === seriesId);
+      if (series) {
+        const updatedChapters = series.chapters.filter(c => c.id !== chapterId);
+        try {
+          await updateDoc(doc(db, "novels", seriesId), {
+            chapters: updatedChapters
+          });
+        } catch (e) {
+          alert("削除エラー: " + e.message);
+        }
+      }
+    };
+
+    // --- 描画処理 ---
+    let selectedTag = null;
+    function renderLibrary() {
+      const library = document.getElementById('library');
+      const tagFilter = document.getElementById('tagFilter');
+
+      const allTags = new Set();
+      novels.forEach(s => (s.tags || []).forEach(t => allTags.add(t)));
+
+      tagFilter.innerHTML = '<strong>タグ絞り込み: </strong>';
+      const allBtn = document.createElement('button');
+      allBtn.textContent = 'すべて';
+      allBtn.onclick = () => { selectedTag = null; renderLibrary(); };
+      tagFilter.appendChild(allBtn);
+
+      allTags.forEach(tag => {
+        const btn = document.createElement('button');
+        btn.textContent = tag;
+        btn.onclick = () => { selectedTag = tag; renderLibrary(); };
+        tagFilter.appendChild(btn);
+      });
+
+      const filtered = selectedTag 
+        ? novels.filter(s => (s.tags || []).includes(selectedTag))
+        : novels;
+
+      if (filtered.length === 0) {
+        library.innerHTML = '<p>作品がありません。</p>';
+        return;
+      }
+
+      library.innerHTML = '';
+      filtered.forEach(series => {
+        const card = document.createElement('div');
+        card.className = 'series-card';
+        const tagsHtml = (series.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+        const authorText = series.author ? `<small>（作者: ${series.author}）</small>` : '';
+
+        card.innerHTML = `
+          <h2>${series.title} ${authorText} ${tagsHtml}</h2>
+          <ul class="chapter-list">
+            ${(!series.chapters || series.chapters.length === 0) ? '<li>（まだ話が追加されていません）</li>' : ''}
+            ${(series.chapters || []).map(c => `
+              <li><a href="#" onclick="readChapter('${series.id}', '${c.id}'); return false;">📄 ${c.title}</a></li>
+            `).join('')}
+          </ul>
+        `;
+        library.appendChild(card);
+      });
+    }
+
+    window.readChapter = function(seriesId, chapterId) {
+      const series = novels.find(s => s.id === seriesId);
+      const chapter = series ? series.chapters.find(c => c.id === chapterId) : null;
+      if (!chapter) return;
+
+      document.getElementById('library').style.display = 'none';
+      document.getElementById('tagFilter').style.display = 'none';
+      document.getElementById('readerArea').style.display = 'block';
+
+      document.getElementById('readChapterTitle').textContent = `${series.title} - ${chapter.title}`;
+      document.getElementById('readContent').textContent = chapter.content;
+      window.scrollTo(0, 0);
+    };
+
+    window.closeReader = function() {
+      document.getElementById('readerArea').style.display = 'none';
+      document.getElementById('library').style.display = 'block';
+      document.getElementById('tagFilter').style.display = 'block';
+    };
+
+    function renderAdmin() {
+      const select = document.getElementById('seriesSelect');
+      select.innerHTML = novels.length === 0 ? '<option value="">作品がありません</option>' : '<option value="">作品を選択してください</option>';
+      
+      novels.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `${s.title} (${s.author || '名無し'})`;
+        select.appendChild(opt);
+      });
+
+      const manageList = document.getElementById('manageList');
+      if (novels.length === 0) {
+        manageList.innerHTML = '<p>投稿された作品はありません。</p>';
+        return;
+      }
+
+      manageList.innerHTML = '';
+      novels.forEach(s => {
+        const div = document.createElement('div');
+        div.style.marginBottom = '15px';
+        div.style.borderBottom = '1px solid #ccc';
+        div.style.paddingBottom = '10px';
+        const tagText = (s.tags && s.tags.length) ? ` [タグ: ${s.tags.join(', ')}]` : '';
+        const authorText = s.author ? ` (作者: ${s.author})` : '';
+
+        div.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>📚 ${s.title}</strong>${authorText}${tagText}
+            <button class="btn-danger" onclick="deleteSeries('${s.id}')">作品ごと削除</button>
+          </div>
+          <ul class="item-list">
+            ${(!s.chapters || s.chapters.length === 0) ? '<li>（話がありません）</li>' : s.chapters.map(c => `
+              <li>
+                <span>📄 ${c.title} (${c.createdAt})</span>
+                <button class="btn-danger" onclick="deleteChapter('${s.id}', '${c.id}')">削除</button>
+              </li>
+            `).join('')}
+          </ul>
+        `;
+        manageList.appendChild(div);
+      });
+    }
+
+    function renderAll() {
+      renderLibrary();
+      renderAdmin();
+    }
+  </script>
+</body>
+</html>
