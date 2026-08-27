@@ -112,18 +112,26 @@
     // --- グローバル関数としてウィンドウに登録 ---
 
     window.switchPage = function(pageId) {
-      document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+     if (pageId === 'adminPage') {
+    const pass = prompt('管理者用パスワードを入力してください:');
+    // ↓ "87351017" の部分を好きな合言葉に変更
+    if (pass !== "87351017") { 
+      alert('パスワードが違います');
+      return;
+    }
+  }
 
-      document.getElementById(pageId).classList.add('active');
-      if (pageId === 'readerPage') {
-        document.querySelectorAll('.tab-btn')[0].classList.add('active');
-        closeReader();
-      } else {
-        document.querySelectorAll('.tab-btn')[1].classList.add('active');
-      }
-    };
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
+  document.getElementById(pageId).classList.add('active');
+  if (pageId === 'readerPage') {
+    document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    closeReader();
+  } else {
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+  }
+};
     // 1. 作品（フォルダ）の新規作成
     window.createSeries = async function() {
       const title = document.getElementById('seriesTitle').value.trim();
