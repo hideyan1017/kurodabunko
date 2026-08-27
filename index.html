@@ -62,6 +62,7 @@
       <h2>1. 新しい作品フォルダを作成</h2>
       <input type="text" id="seriesTitle" placeholder="作品名（例: 黒田ワールド）">
       <input type="text" id="seriesAuthor" placeholder="作者名（例: 黒田祥一）">
+      <input type="password" id="seriesPass" placeholder="削除用パスワード">
       <input type="text" id="seriesTags" placeholder="タグ（カンマ区切り 例: SF, 冒険, 完結）">
       <button class="btn-submit" onclick="createSeries()">作品フォルダを作成</button>
     </div>
@@ -115,7 +116,7 @@
      if (pageId === 'adminPage') {
     const pass = prompt('管理者用パスワードを入力してください:');
     // ↓ "87351017" の部分を好きな合言葉に変更
-    if (pass !== "87351017") { 
+    if (pass !== "8735") { 
       alert('パスワードが違います');
       return;
     }
@@ -133,31 +134,81 @@
   }
 };
     // 1. 作品（フォルダ）の新規作成
-    window.createSeries = async function() {
-      const title = document.getElementById('seriesTitle').value.trim();
-      const author = document.getElementById('seriesAuthor').value.trim() || '名無し';
-      const tagsInput = document.getElementById('seriesTags').value.trim();
+   window.createSeries = async function() {
+  const title = document.getElementById('seriesTitle').value.trim();
+  const author = document.getElementById('seriesAuthor').value.trim() || '名無し';
+  const pass = document.getElementById('seriesPass').value.trim(); // ★追加
+  const tagsInput = document.getElementById('seriesTags').value.trim();
 
-      if (!title) return alert('作品名を入力してください');
+  if (!title) return alert('作品名を入力してください');
 
-      const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : [];
+  const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : [];
 
-      try {
-        await addDoc(collection(db, "novels"), {
-          title: title,
-          author: author,
-          tags: tags,
-          chapters: [],
-          createdAt: new Date().toISOString()
-        });
-        document.getElementById('seriesTitle').value = '';
-        document.getElementById('seriesAuthor').value = '';
-        document.getElementById('seriesTags').value = '';
-        alert(`作品「${title}」を作成しました`);
-      } catch (e) {
-        alert("エラーが発生しました: " + e.message);
-      }
-    };
+  try {
+    await addDoc(collection(db, "novels"), {
+      title: title,
+      author: author,
+      pass: pass, // ★追加
+      tags: tags,
+      chapters: [],
+      createdAt: new Date().toISOString()
+    });
+    document.getElementById('seriesTitle').value = '';
+    document.getElementById('seriesAuthor').value = '';
+    document.getElementById('seriesPass').value = ''; // ★追加
+    document.getElementById('seriesTags').value = '';
+    alert(`作品「${title}」を作成しました`);
+  } catch (e) {
+    alert("エラーが発生しました: " + e.message);
+  }
+};
+
+// 3. 作品全体の削除（パスワード確認を追加）
+window.deleteSeries = async function(seriesId) {
+  const series = novels.find(s => s.id === seriesId);
+  if (!series) return;
+
+  // パスワードが設定されている場合のみ確認
+  if (series.pass) {
+    const inputPass = prompt('この作品を削除するためのパスワードを入力してください:');
+    if (inputPass !== series.pass) {
+      return alert('パスワードが違います。削除できません。');
+    }
+  } else {
+    if (!confirm('この作品と、含まれるすべての話を削除しますか？')) return;
+  }
+
+  try {
+    await deleteDoc(doc(db, "novels", seriesId));
+  } catch (e) {
+    alert("削除エラー: " + e.message);
+  }
+};
+
+// 4. 特定の話のみ削除（作品のパスワードで確認）
+window.deleteChapter = async function(seriesId, chapterId) {
+  const series = novels.find(s => s.id === seriesId);
+  if (!series) return;
+
+  // パスワードが設定されている場合のみ確認
+  if (series.pass) {
+    const inputPass = prompt('削除用パスワードを入力してください:');
+    if (inputPass !== series.pass) {
+      return alert('パスワードが違います。削除できません。');
+    }
+  } else {
+    if (!confirm('この話を削除しますか？')) return;
+  }
+
+  const updatedChapters = series.chapters.filter(c => c.id !== chapterId);
+  try {
+    await updateDoc(doc(db, "novels", seriesId), {
+      chapters: updatedChapters
+    });
+  } catch (e) {
+    alert("削除エラー: " + e.message);
+  }
+};
 
     // 2. 巻・話の追加
     window.addChapter = async function() {
