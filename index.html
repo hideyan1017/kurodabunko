@@ -62,6 +62,9 @@
       <button onclick="closeReader()" style="cursor:pointer; width:auto;">← 一覧に戻る</button>
       <h2 id="readChapterTitle"></h2>
       <div id="readContent" class="viewer"></div>
+
+      <!-- ★ここにコメント表示枠を追加 -->
+      <div id="chapterCommentArea" class="comment-section"></div>
     </div>
   </div>
 
@@ -205,10 +208,11 @@
       }
     };
 
-    // コメントを送る処理
-    window.addComment = async function(seriesId) {
-      const nameInput = document.getElementById(`comment-name-${seriesId}`);
-      const textInput = document.getElementById(`comment-text-${seriesId}`);
+  // 本文下のコメント送信処理
+    window.addChapterComment = async function(seriesId, chapterId) {
+      const nameInput = document.getElementById('chapter-comment-name');
+      const textInput = document.getElementById('chapter-comment-text');
+
       const name = nameInput.value.trim() || '名無し';
       const text = textInput.value.trim();
 
@@ -218,19 +222,21 @@
         const seriesRef = doc(db, "novels", seriesId);
         const newComment = {
           id: Date.now().toString(),
+          chapterId: chapterId,
           name: name,
           text: text,
           createdAt: new Date().toLocaleString()
         };
+
         await updateDoc(seriesRef, {
           comments: arrayUnion(newComment)
         });
+
         textInput.value = '';
       } catch (e) {
         alert("コメント投稿エラー: " + e.message);
       }
     };
-
     // 3. 作品全体の削除（パスワード確認）
     window.deleteSeries = async function(seriesId) {
       const series = novels.find(s => s.id === seriesId);
@@ -365,6 +371,32 @@
 
       document.getElementById('readChapterTitle').textContent = `${series.title} - ${chapter.title}`;
       document.getElementById('readContent').textContent = chapter.content;
+
+      // 対象となる話のコメントのみ抽出
+      const allComments = series.comments || [];
+      const chapterComments = allComments.filter(c => !c.chapterId || c.chapterId === chapterId);
+
+      const commentsHtml = chapterComments.map(c => `
+        <li class="comment-item">
+          <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
+          <div>${c.text}</div>
+        </li>
+      `).join('');
+
+      // 本文の下にコメント表示・投稿欄を生成
+      const commentArea = document.getElementById('chapterCommentArea');
+      commentArea.innerHTML = `
+        <h3>💬 読後感想・コメント (${chapterComments.length})</h3>
+        <ul class="comment-list">
+          ${chapterComments.length === 0 ? '<li style="color:#888; font-size:0.85em;">まだコメントはありません。感想を送ってみよう！</li>' : commentsHtml}
+        </ul>
+        <div class="comment-form">
+          <input type="text" id="chapter-comment-name" class="name-input" placeholder="名前">
+          <input type="text" id="chapter-comment-text" class="text-input" placeholder="感想を書く...">
+          <button class="btn-submit" onclick="addChapterComment('${series.id}', '${chapter.id}')">送信</button>
+        </div>
+      `;
+
       window.scrollTo(0, 0);
     };
 
