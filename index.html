@@ -32,6 +32,17 @@
     .item-list { list-style: none; padding: 0; }
     .item-list li { background: #fff; border: 1px solid #ddd; padding: 10px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
     .viewer { background: #fdfbf7; border: 1px solid #e2dcd3; padding: 25px; border-radius: 6px; margin-top: 20px; white-space: pre-wrap; word-wrap: break-word; }
+    /* コメント欄の見た目 */
+    .comment-section { margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ccc; font-family: sans-serif; }
+    .comment-section h3 { font-size: 1rem; margin-bottom: 10px; }
+    .comment-list { list-style: none; padding: 0; margin-bottom: 15px; }
+    .comment-item { background: #f9f9f9; border: 1px solid #eee; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px; font-size: 0.9em; }
+    .comment-meta { font-size: 0.8em; color: #666; margin-bottom: 4px; }
+    .comment-form { display: flex; gap: 8px; flex-wrap: wrap; }
+    .comment-form input[type="text"] { margin: 0; }
+    .comment-form .name-input { width: 30%; }
+    .comment-form .text-input { width: 50%; flex-grow: 1; }
+    .comment-form button { width: auto; margin: 0; padding: 8px 15px; }
   </style>
 </head>
 <body>
@@ -194,6 +205,32 @@
       }
     };
 
+    // コメントを送る処理
+    window.addComment = async function(seriesId) {
+      const nameInput = document.getElementById(`comment-name-${seriesId}`);
+      const textInput = document.getElementById(`comment-text-${seriesId}`);
+      const name = nameInput.value.trim() || '名無し';
+      const text = textInput.value.trim();
+
+      if (!text) return alert('コメント内容を入力してください');
+
+      try {
+        const seriesRef = doc(db, "novels", seriesId);
+        const newComment = {
+          id: Date.now().toString(),
+          name: name,
+          text: text,
+          createdAt: new Date().toLocaleString()
+        };
+        await updateDoc(seriesRef, {
+          comments: arrayUnion(newComment)
+        });
+        textInput.value = '';
+      } catch (e) {
+        alert("コメント投稿エラー: " + e.message);
+      }
+    };
+
     // 3. 作品全体の削除（パスワード確認）
     window.deleteSeries = async function(seriesId) {
       const series = novels.find(s => s.id === seriesId);
@@ -282,6 +319,15 @@
         const tagsHtml = (series.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
         const authorText = series.author ? `<small>（作者: ${series.author}）</small>` : '';
 
+        // コメント一覧の組み立て
+        const comments = series.comments || [];
+        const commentsHtml = comments.map(c => `
+          <li class="comment-item">
+            <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
+            <div>${c.text}</div>
+          </li>
+        `).join('');
+
         card.innerHTML = `
           <h2>${series.title} ${authorText} ${tagsHtml}</h2>
           <ul class="chapter-list">
@@ -290,6 +336,19 @@
               <li><a href="#" onclick="readChapter('${series.id}', '${c.id}'); return false;">📄 ${c.title}</a></li>
             `).join('')}
           </ul>
+
+          <!-- ★コメント表示・入力エリア -->
+          <div class="comment-section">
+            <h3>💬 感想・コメント (${comments.length})</h3>
+            <ul class="comment-list">
+              ${comments.length === 0 ? '<li style="color:#888; font-size:0.85em;">まだコメントはありません。</li>' : commentsHtml}
+            </ul>
+            <div class="comment-form">
+              <input type="text" id="comment-name-${series.id}" class="name-input" placeholder="名前">
+              <input type="text" id="comment-text-${series.id}" class="text-input" placeholder="感想を書く...">
+              <button class="btn-submit" onclick="addComment('${series.id}')">送信</button>
+            </div>
+          </div>
         `;
         library.appendChild(card);
       });
