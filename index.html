@@ -343,18 +343,7 @@
             `).join('')}
           </ul>
 
-          <!-- ★コメント表示・入力エリア -->
-          <div class="comment-section">
-            <h3>💬 感想・コメント (${comments.length})</h3>
-            <ul class="comment-list">
-              ${comments.length === 0 ? '<li style="color:#888; font-size:0.85em;">まだコメントはありません。</li>' : commentsHtml}
-            </ul>
-            <div class="comment-form">
-              <input type="text" id="comment-name-${series.id}" class="name-input" placeholder="名前">
-              <input type="text" id="comment-text-${series.id}" class="text-input" placeholder="感想を書く...">
-              <button class="btn-submit" onclick="addComment('${series.id}')">送信</button>
-            </div>
-          </div>
+      
         `;
         library.appendChild(card);
       });
