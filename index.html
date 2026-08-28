@@ -43,6 +43,21 @@
     .comment-form .name-input { width: 30%; }
     .comment-form .text-input { width: 50%; flex-grow: 1; }
     .comment-form button { width: auto; margin: 0; padding: 8px 15px; }
+
+    /* いいねボタン用スタイル */
+.btn-like { 
+  background: #f0f7ff; 
+  border: 1px solid #b3d7ff; 
+  color: #0066cc; 
+  border-radius: 15px; 
+  padding: 4px 12px; 
+  cursor: pointer; 
+  font-size: 0.85em; 
+  width: auto; 
+  margin: 0; 
+  transition: background 0.2s; 
+}
+.btn-like:hover { background: #e0f0ff; }
   </style>
 </head>
 <body>
@@ -227,7 +242,14 @@
           text: text,
           createdAt: new Date().toLocaleString()
         };
-
+const newComment = {
+  id: Date.now().toString(),
+  chapterId: chapterId,
+  name: name,
+  text: text,
+  likes: 0, // ★ここを追加（初期値0）
+  createdAt: new Date().toLocaleString()
+};
         await updateDoc(seriesRef, {
           comments: arrayUnion(newComment)
         });
@@ -237,6 +259,7 @@
         alert("コメント投稿エラー: " + e.message);
       }
     };
+    
     // 3. 作品全体の削除（パスワード確認）
     window.deleteSeries = async function(seriesId) {
       const series = novels.find(s => s.id === seriesId);
@@ -287,6 +310,27 @@
         alert("削除エラー: " + e.message);
       }
     };
+    // コメントへの「いいね」処理
+window.likeComment = async function(seriesId, commentId) {
+  const series = novels.find(s => s.id === seriesId);
+  if (!series || !series.comments) return;
+
+  const updatedComments = series.comments.map(c => {
+    if (c.id === commentId) {
+      return { ...c, likes: (c.likes || 0) + 1 };
+    }
+    return c;
+  });
+
+  try {
+    const seriesRef = doc(db, "novels", seriesId);
+    await updateDoc(seriesRef, {
+      comments: updatedComments
+    });
+  } catch (e) {
+    alert("いいねエラー: " + e.message);
+  }
+};
     // --- 描画処理 ---
     let selectedTag = null;
     function renderLibrary() {
@@ -365,12 +409,19 @@
       const allComments = series.comments || [];
       const chapterComments = allComments.filter(c => !c.chapterId || c.chapterId === chapterId);
 
-      const commentsHtml = chapterComments.map(c => `
-        <li class="comment-item">
-          <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
-          <div>${c.text}</div>
-        </li>
-      `).join('');
+// commentsHtml を作成している箇所を書き換え
+const commentsHtml = chapterComments.map(c => `
+  <li class="comment-item">
+    <div class="comment-body">
+      <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
+      <div>${c.text}</div>
+    </div>
+    <!-- ★以下のボタンを追加 -->
+    <button class="btn-like" onclick="likeComment('${series.id}', '${c.id}')">
+      👍 ${c.likes || 0}
+    </button>
+  </li>
+`).join('');
 
       // 本文の下にコメント表示・投稿欄を生成
       const commentArea = document.getElementById('chapterCommentArea');
