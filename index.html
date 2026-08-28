@@ -261,27 +261,37 @@
       }
     };
 
-    // コメントへの「いいね」処理
-    window.likeComment = async function(seriesId, commentId) {
-      const series = novels.find(s => s.id === seriesId);
-      if (!series || !series.comments) return;
+// コメントへの「いいね」処理（1人1回制限つき）
+window.likeComment = async function(seriesId, commentId) {
+  // ブラウザに「このコメントにいいねしたか」の記録があるか確認
+  const storageKey = `liked_${seriesId}_${commentId}`;
+  if (localStorage.getItem(storageKey)) {
+    alert("「いいね」は1人1回までです。");
+    return;
+  }
 
-      const updatedComments = series.comments.map(c => {
-        if (c.id === commentId) {
-          return { ...c, likes: (c.likes || 0) + 1 };
-        }
-        return c;
-      });
+  const series = novels.find(s => s.id === seriesId);
+  if (!series || !series.comments) return;
 
-      try {
-        const seriesRef = doc(db, "novels", seriesId);
-        await updateDoc(seriesRef, {
-          comments: updatedComments
-        });
-      } catch (e) {
-        alert("いいねエラー: " + e.message);
-      }
-    };
+  const updatedComments = series.comments.map(c => {
+    if (c.id === commentId) {
+      return { ...c, likes: (c.likes || 0) + 1 };
+    }
+    return c;
+  });
+
+  try {
+    const seriesRef = doc(db, "novels", seriesId);
+    await updateDoc(seriesRef, {
+      comments: updatedComments
+    });
+
+    // 成功したらブラウザにいいね済みのフラグを保存
+    localStorage.setItem(storageKey, "true");
+  } catch (e) {
+    alert("いいねエラー: " + e.message);
+  }
+};
 
     // 作品全体の削除
     window.deleteSeries = async function(seriesId) {
