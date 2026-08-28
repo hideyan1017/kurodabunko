@@ -6,7 +6,7 @@
   <title>黒田文庫</title>
   <style>
     body { font-family: "Georgia", "Hiragino Mincho ProN", serif; max-width: 800px; margin: 20px auto; padding: 0 20px; line-height: 1.8; color: #2b2b2b; }
-    h1, h2 { color: #333; font-family: sans-serif; }
+    h1, h2, h3 { color: #333; font-family: sans-serif; }
     a { color: #0066cc; text-decoration: none; }
     
     .tab-nav { font-family: sans-serif; display: flex; gap: 10px; border-bottom: 2px solid #ddd; margin-bottom: 20px; padding-bottom: 10px; }
@@ -32,11 +32,12 @@
     .item-list { list-style: none; padding: 0; }
     .item-list li { background: #fff; border: 1px solid #ddd; padding: 10px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
     .viewer { background: #fdfbf7; border: 1px solid #e2dcd3; padding: 25px; border-radius: 6px; margin-top: 20px; white-space: pre-wrap; word-wrap: break-word; }
+    
     /* コメント欄の見た目 */
     .comment-section { margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ccc; font-family: sans-serif; }
     .comment-section h3 { font-size: 1rem; margin-bottom: 10px; }
     .comment-list { list-style: none; padding: 0; margin-bottom: 15px; }
-    .comment-item { background: #f9f9f9; border: 1px solid #eee; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px; font-size: 0.9em; }
+    .comment-item { background: #f9f9f9; border: 1px solid #eee; padding: 8px 12px; border-radius: 4px; margin-bottom: 6px; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; }
     .comment-meta { font-size: 0.8em; color: #666; margin-bottom: 4px; }
     .comment-form { display: flex; gap: 8px; flex-wrap: wrap; }
     .comment-form input[type="text"] { margin: 0; }
@@ -45,19 +46,19 @@
     .comment-form button { width: auto; margin: 0; padding: 8px 15px; }
 
     /* いいねボタン用スタイル */
-.btn-like { 
-  background: #f0f7ff; 
-  border: 1px solid #b3d7ff; 
-  color: #0066cc; 
-  border-radius: 15px; 
-  padding: 4px 12px; 
-  cursor: pointer; 
-  font-size: 0.85em; 
-  width: auto; 
-  margin: 0; 
-  transition: background 0.2s; 
-}
-.btn-like:hover { background: #e0f0ff; }
+    .btn-like { 
+      background: #f0f7ff; 
+      border: 1px solid #b3d7ff; 
+      color: #0066cc; 
+      border-radius: 15px; 
+      padding: 4px 12px; 
+      cursor: pointer; 
+      font-size: 0.85em; 
+      width: auto; 
+      margin: 0; 
+      transition: background 0.2s; 
+    }
+    .btn-like:hover { background: #e0f0ff; }
   </style>
 </head>
 <body>
@@ -78,7 +79,7 @@
       <h2 id="readChapterTitle"></h2>
       <div id="readContent" class="viewer"></div>
 
-      <!-- ★ここにコメント表示枠を追加 -->
+      <!-- コメント表示枠 -->
       <div id="chapterCommentArea" class="comment-section"></div>
     </div>
   </div>
@@ -118,7 +119,6 @@
       getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, arrayUnion 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // ★★★ ここを自身のFirebaseの設定情報に置き換えてください ★★★
     const firebaseConfig = {
       apiKey: "AIzaSyAIexYo5tCQ2_IfkBeaw6iaZi41VRciW-A",
       authDomain: "novel-app-5300d.firebaseapp.com",
@@ -132,37 +132,43 @@
     const db = getFirestore(app);
 
     let novels = []; // リアルタイム同期される作品データ
+    let currentSeriesId = null;
+    let currentChapterId = null;
 
-    // Firestoreのデータ変更をリアルタイム監視（友達が投稿したら自動更新）
+    // Firestoreのデータ変更をリアルタイム監視
     onSnapshot(collection(db, "novels"), (snapshot) => {
       novels = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       renderAll();
+      
+      // 閲覧中であればコメントもリアルタイム更新
+      const readerArea = document.getElementById('readerArea');
+      if (readerArea.style.display === 'block' && currentSeriesId && currentChapterId) {
+        renderComments(currentSeriesId, currentChapterId);
+      }
     });
 
-    // --- グローバル関数としてウィンドウに登録 ---
-
     window.switchPage = function(pageId) {
-     if (pageId === 'adminPage') {
-    const pass = prompt('管理者用パスワードを入力してください:');
-    // ↓ "87351017" の部分を好きな合言葉に変更
-    if (pass !== "8735") { 
-      alert('パスワードが違います');
-      return;
-    }
-  }
+      if (pageId === 'adminPage') {
+        const pass = prompt('管理者用パスワードを入力してください:');
+        if (pass !== "8735") { 
+          alert('パスワードが違います');
+          return;
+        }
+      }
 
-  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
-  document.getElementById(pageId).classList.add('active');
-  if (pageId === 'readerPage') {
-    document.querySelectorAll('.tab-btn')[0].classList.add('active');
-    closeReader();
-  } else {
-    document.querySelectorAll('.tab-btn')[1].classList.add('active');
-  }
-};
-// 1. 作品（フォルダ）の新規作成（パスワード保存）
+      document.getElementById(pageId).classList.add('active');
+      if (pageId === 'readerPage') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        window.closeReader();
+      } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+      }
+    };
+
+    // 1. 作品（フォルダ）の新規作成
     window.createSeries = async function() {
       const title = document.getElementById('seriesTitle').value.trim();
       const author = document.getElementById('seriesAuthor').value.trim() || '名無し';
@@ -181,6 +187,7 @@
           pass: pass,
           tags: tags,
           chapters: [],
+          comments: [],
           createdAt: new Date().toISOString()
         });
         document.getElementById('seriesTitle').value = '';
@@ -223,7 +230,7 @@
       }
     };
 
-  // 本文下のコメント送信処理
+    // コメント送信処理
     window.addChapterComment = async function(seriesId, chapterId) {
       const nameInput = document.getElementById('chapter-comment-name');
       const textInput = document.getElementById('chapter-comment-text');
@@ -240,16 +247,10 @@
           chapterId: chapterId,
           name: name,
           text: text,
+          likes: 0,
           createdAt: new Date().toLocaleString()
         };
-const newComment = {
-  id: Date.now().toString(),
-  chapterId: chapterId,
-  name: name,
-  text: text,
-  likes: 0, // ★ここを追加（初期値0）
-  createdAt: new Date().toLocaleString()
-};
+
         await updateDoc(seriesRef, {
           comments: arrayUnion(newComment)
         });
@@ -259,22 +260,42 @@ const newComment = {
         alert("コメント投稿エラー: " + e.message);
       }
     };
-    
-    // 3. 作品全体の削除（パスワード確認）
+
+    // コメントへの「いいね」処理
+    window.likeComment = async function(seriesId, commentId) {
+      const series = novels.find(s => s.id === seriesId);
+      if (!series || !series.comments) return;
+
+      const updatedComments = series.comments.map(c => {
+        if (c.id === commentId) {
+          return { ...c, likes: (c.likes || 0) + 1 };
+        }
+        return c;
+      });
+
+      try {
+        const seriesRef = doc(db, "novels", seriesId);
+        await updateDoc(seriesRef, {
+          comments: updatedComments
+        });
+      } catch (e) {
+        alert("いいねエラー: " + e.message);
+      }
+    };
+
+    // 作品全体の削除
     window.deleteSeries = async function(seriesId) {
       const series = novels.find(s => s.id === seriesId);
       if (!series) return;
 
-      // パスワードが設定されている場合
       if (series.pass) {
         const inputPass = prompt(`「${series.title}」を削除するためのパスワードを入力してください:`);
-        if (inputPass === null) return; // キャンセル時
+        if (inputPass === null) return;
         if (inputPass !== series.pass) {
           return alert('パスワードが違います。削除できません。');
         }
       } else {
-        // 過去のパスワードなし作品の場合
-        if (!confirm('この作品を削除しますか？（パスワード未設定）')) return;
+        if (!confirm('この作品を削除しますか？')) return;
       }
 
       try {
@@ -285,14 +306,14 @@ const newComment = {
       }
     };
 
-    // 4. 特定の話のみ削除（作品のパスワード確認）
+    // 特定の話のみ削除
     window.deleteChapter = async function(seriesId, chapterId) {
       const series = novels.find(s => s.id === seriesId);
       if (!series) return;
 
       if (series.pass) {
         const inputPass = prompt('削除用パスワードを入力してください:');
-        if (inputPass === null) return; // キャンセル時
+        if (inputPass === null) return;
         if (inputPass !== series.pass) {
           return alert('パスワードが違います。削除できません。');
         }
@@ -310,27 +331,7 @@ const newComment = {
         alert("削除エラー: " + e.message);
       }
     };
-    // コメントへの「いいね」処理
-window.likeComment = async function(seriesId, commentId) {
-  const series = novels.find(s => s.id === seriesId);
-  if (!series || !series.comments) return;
 
-  const updatedComments = series.comments.map(c => {
-    if (c.id === commentId) {
-      return { ...c, likes: (c.likes || 0) + 1 };
-    }
-    return c;
-  });
-
-  try {
-    const seriesRef = doc(db, "novels", seriesId);
-    await updateDoc(seriesRef, {
-      comments: updatedComments
-    });
-  } catch (e) {
-    alert("いいねエラー: " + e.message);
-  }
-};
     // --- 描画処理 ---
     let selectedTag = null;
     function renderLibrary() {
@@ -369,15 +370,6 @@ window.likeComment = async function(seriesId, commentId) {
         const tagsHtml = (series.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
         const authorText = series.author ? `<small>（作者: ${series.author}）</small>` : '';
 
-        // コメント一覧の組み立て
-        const comments = series.comments || [];
-        const commentsHtml = comments.map(c => `
-          <li class="comment-item">
-            <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
-            <div>${c.text}</div>
-          </li>
-        `).join('');
-
         card.innerHTML = `
           <h2>${series.title} ${authorText} ${tagsHtml}</h2>
           <ul class="chapter-list">
@@ -386,8 +378,6 @@ window.likeComment = async function(seriesId, commentId) {
               <li><a href="#" onclick="readChapter('${series.id}', '${c.id}'); return false;">📄 ${c.title}</a></li>
             `).join('')}
           </ul>
-
-      
         `;
         library.appendChild(card);
       });
@@ -398,6 +388,9 @@ window.likeComment = async function(seriesId, commentId) {
       const chapter = series ? series.chapters.find(c => c.id === chapterId) : null;
       if (!chapter) return;
 
+      currentSeriesId = seriesId;
+      currentChapterId = chapterId;
+
       document.getElementById('library').style.display = 'none';
       document.getElementById('tagFilter').style.display = 'none';
       document.getElementById('readerArea').style.display = 'block';
@@ -405,25 +398,29 @@ window.likeComment = async function(seriesId, commentId) {
       document.getElementById('readChapterTitle').textContent = `${series.title} - ${chapter.title}`;
       document.getElementById('readContent').textContent = chapter.content;
 
-      // 対象となる話のコメントのみ抽出
+      renderComments(seriesId, chapterId);
+      window.scrollTo(0, 0);
+    };
+
+    function renderComments(seriesId, chapterId) {
+      const series = novels.find(s => s.id === seriesId);
+      if (!series) return;
+
       const allComments = series.comments || [];
       const chapterComments = allComments.filter(c => !c.chapterId || c.chapterId === chapterId);
 
-// commentsHtml を作成している箇所を書き換え
-const commentsHtml = chapterComments.map(c => `
-  <li class="comment-item">
-    <div class="comment-body">
-      <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
-      <div>${c.text}</div>
-    </div>
-    <!-- ★以下のボタンを追加 -->
-    <button class="btn-like" onclick="likeComment('${series.id}', '${c.id}')">
-      👍 ${c.likes || 0}
-    </button>
-  </li>
-`).join('');
+      const commentsHtml = chapterComments.map(c => `
+        <li class="comment-item">
+          <div class="comment-body">
+            <div class="comment-meta"><strong>${c.name}</strong> (${c.createdAt})</div>
+            <div>${c.text}</div>
+          </div>
+          <button class="btn-like" onclick="likeComment('${series.id}', '${c.id}')">
+            👍 ${c.likes || 0}
+          </button>
+        </li>
+      `).join('');
 
-      // 本文の下にコメント表示・投稿欄を生成
       const commentArea = document.getElementById('chapterCommentArea');
       commentArea.innerHTML = `
         <h3>💬 読後感想・コメント (${chapterComments.length})</h3>
@@ -433,22 +430,14 @@ const commentsHtml = chapterComments.map(c => `
         <div class="comment-form">
           <input type="text" id="chapter-comment-name" class="name-input" placeholder="名前">
           <input type="text" id="chapter-comment-text" class="text-input" placeholder="感想を書く...">
-          <button class="btn-submit" onclick="addChapterComment('${series.id}', '${chapter.id}')">送信</button>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
-          <div>&nbsp;</div>
+          <button class="btn-submit" onclick="addChapterComment('${series.id}', '${chapterId}')">送信</button>
         </div>
       `;
-
-      window.scrollTo(0, 0);
-    };
+    }
 
     window.closeReader = function() {
+      currentSeriesId = null;
+      currentChapterId = null;
       document.getElementById('readerArea').style.display = 'none';
       document.getElementById('library').style.display = 'block';
       document.getElementById('tagFilter').style.display = 'block';
